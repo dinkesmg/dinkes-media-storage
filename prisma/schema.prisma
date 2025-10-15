@@ -26,3 +26,11 @@ model File {
   created_at        DateTime @default(now())
   updated_at        DateTime @updatedAt
 }
+
+model Project {
+  id        Int      @id @default(autoincrement())
+  name      String   @unique
+  api_key   String   @unique
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+}

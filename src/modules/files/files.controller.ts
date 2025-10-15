@@ -1,7 +1,20 @@
-import { Controller, Post, UploadedFile, UseInterceptors, Query, Get, Param, Delete, ParseIntPipe } from '@nestjs/common';
+import {
+  Controller,
+  Post,
+  UploadedFile,
+  UseInterceptors,
+  Query,
+  Get,
+  Param,
+  Delete,
+  ParseIntPipe,
+  UseGuards,
+  Request,
+} from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { FilesService } from './files.service';
 import type { Express } from 'express';
+import { ApiKeyGuard } from 'src/guards/api-key.guard';
 
 @Controller('files')
 export class FilesController {
@@ -9,9 +22,18 @@ export class FilesController {
 
   // Upload file
   @Post('upload')
+  @UseGuards(ApiKeyGuard)
   @UseInterceptors(FileInterceptor('file'))
-  async uploadFile(@UploadedFile() file: Express.Multer.File, @Query('project') project?: string) {
-    const result = await this.filesService.saveFile(file, project);
+  // async uploadFile(
+  //   @UploadedFile() file: Express.Multer.File,
+  //   @Query('project') project?: string,
+  // ) {
+  //   const result = await this.filesService.saveFile(file, project);
+  //   return { message: 'Upload successful', url: result.url };
+  // }
+  async uploadFile(@UploadedFile() file: Express.Multer.File, @Request() req) {
+    const projectName = req.project; // didapat dari Guard
+    const result = await this.filesService.saveFile(file, projectName);
     return { message: 'Upload successful', url: result.url };
   }
 
