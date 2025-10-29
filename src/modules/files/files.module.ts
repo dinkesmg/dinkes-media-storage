@@ -1,41 +1,40 @@
 import { Module } from '@nestjs/common';
+import { MulterModule } from '@nestjs/platform-express';
+import { ConfigModule } from '@nestjs/config'; // ✅ tambahkan ini
+import { diskStorage } from 'multer';
+import * as fs from 'fs';
+import * as path from 'path';
+
 import { FilesController } from './files.controller';
 import { FilesService } from './files.service';
 import { PrismaService } from '../../prisma/prisma.service';
-import { MulterModule } from '@nestjs/platform-express';
-import { diskStorage } from 'multer';
-import * as path from 'path';
-import * as fs from 'fs';
+import { ApiKeyGuard } from '../../guards/api-key.guard';
+
+const baseStorage =
+  process.env.STORAGE_DIR || path.join(process.cwd(), 'storage_local');
+
+const MulterConfig = {
+  storage: diskStorage({
+    destination: (_req, _file, cb) => {
+      const dest = path.join(baseStorage, 'images');
+      fs.mkdirSync(dest, { recursive: true });
+      cb(null, dest);
+    },
+    filename: (_req, file, cb) => {
+      const ext = path.extname(file.originalname);
+      const unique = `file-${Date.now()}${ext}`;
+      cb(null, unique);
+    },
+  }),
+};
 
 @Module({
   imports: [
-    MulterModule.register({
-      storage: diskStorage({
-        destination: (req, file, cb) => {
-          const uploadPath = path.join(__dirname, '../../../public/images');
-
-          // buat folder kalau belum ada
-          if (!fs.existsSync(uploadPath))
-            fs.mkdirSync(uploadPath, { recursive: true });
-
-          cb(null, uploadPath);
-        },
-        filename: (req, file, cb) => {
-          const slug = req.body.slug || 'file'; // bisa dari frontend atau generate backend
-          const timestamp = Date.now();
-          const ext = path.extname(file.originalname);
-          cb(null, `${slug}-${timestamp}${ext}`);
-        },
-      }),
-      limits: { fileSize: 2 * 1024 * 1024 }, // 2MB
-      fileFilter: (req, file, cb) => {
-        const allowedTypes = ['image/jpeg', 'image/png', 'image/webp'];
-        if (allowedTypes.includes(file.mimetype)) cb(null, true);
-        else cb(new Error('Invalid file type'), false);
-      },
-    }),
+    MulterModule.register(MulterConfig),
+    ConfigModule, // ✅ ini yang bikin ConfigService tersedia di FilesService
   ],
   controllers: [FilesController],
-  providers: [FilesService, PrismaService],
+  providers: [FilesService, PrismaService, ApiKeyGuard],
+  exports: [FilesService],
 })
 export class FilesModule {}

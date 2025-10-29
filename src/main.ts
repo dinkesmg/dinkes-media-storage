@@ -7,8 +7,14 @@ import rateLimit from 'express-rate-limit';
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
-  // Serve public/images sebagai static
-  app.use('/images', express.static(join(__dirname, '../public/images')));
+  // base path dinamis dari ENV atau fallback ke folder lokal
+  const baseStorage =
+    process.env.STORAGE_DIR || join(__dirname, '../storage_local');
+
+  // Serve folder images agar bisa diakses via http://localhost:3001/images/xxx.jpg
+  app.use('/images', express.static(join(baseStorage, 'images')));
+
+  console.log('Serving images from:', join(baseStorage, 'images'));
 
   app.enableCors({
     origin: [
@@ -31,7 +37,7 @@ async function bootstrap() {
     }),
   );
 
-  await app.listen(3000);
-  console.log('CDN Service running on http://localhost:3000');
+  await app.listen(3001);
+  console.log('CDN Service running on http://localhost:3001');
 }
 bootstrap();

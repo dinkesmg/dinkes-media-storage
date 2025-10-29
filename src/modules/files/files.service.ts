@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../../prisma/prisma.service';
 import { File } from '@prisma/client';
 import * as fs from 'fs';
@@ -6,11 +7,32 @@ import * as path from 'path';
 
 @Injectable()
 export class FilesService {
-  constructor(private prisma: PrismaService) {}
+  private readonly baseUrl: string;
+  private readonly storageDir: string;
+
+  constructor(
+    private prisma: PrismaService,
+    private configService: ConfigService,
+  ) {
+    const baseUrl = this.configService.get<string>('BASE_URL');
+    if (!baseUrl) {
+      throw new Error('BASE_URL environment variable is not set');
+    }
+    this.baseUrl = baseUrl;
+
+    // isi storageDir dari ENV atau fallback ke folder lokal
+    this.storageDir =
+      this.configService.get<string>('STORAGE_DIR') ||
+      path.join(process.cwd(), 'storage_local');
+  }
 
   // Simpan file metadata ke database
-  async saveFile(file: Express.Multer.File, project = 'default', uploaded_by?: string): Promise<File> {
-    const url = `http://localhost:3000/images/${file.filename}`;
+  async saveFile(
+    file: Express.Multer.File,
+    project = 'default',
+    uploaded_by?: string,
+  ): Promise<File> {
+    const url = `${this.baseUrl}/images/${file.filename}`;
     return this.prisma.file.create({
       data: {
         project_name: project,
@@ -42,7 +64,7 @@ export class FilesService {
     const file = await this.getFile(id);
     if (!file) return false;
 
-    const filePath = path.join(__dirname, '../../../public/images', file.filename_server);
+    const filePath = path.join(this.storageDir, 'images', file.filename_server);
     if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
 
     await this.prisma.file.delete({ where: { id } });
