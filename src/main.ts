@@ -3,9 +3,21 @@ import { AppModule } from './app.module';
 import { join } from 'path';
 import * as express from 'express';
 import rateLimit from 'express-rate-limit';
+import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
+
+  const config = new DocumentBuilder()
+    .setTitle('Media Storage API')
+    .setDescription('Daftar endpoint API')
+    .setVersion('1.0')
+    .build();
+
+  const document = SwaggerModule.createDocument(app, config);
+  SwaggerModule.setup('api-docs', app, document, {
+    useGlobalPrefix: true,
+  });
 
   // base path dinamis dari ENV atau fallback ke folder lokal
   const baseStorage =
