@@ -1,13 +1,11 @@
-import {
-  Injectable,
-  BadRequestException,
-} from '@nestjs/common';
+import { Injectable, BadRequestException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../../prisma/prisma.service';
 import { File } from '@prisma/client';
 import * as fs from 'fs';
 import * as path from 'path';
 import sharp from 'sharp';
+import crypto from 'crypto';
 
 @Injectable()
 export class FilesService {
@@ -33,17 +31,14 @@ export class FilesService {
   /**
    * Ambil buffer file dari memoryStorage atau diskStorage.
    */
-  private async getFileBuffer(
-    file: Express.Multer.File,
-  ): Promise<Buffer> {
+  private async getFileBuffer(file: Express.Multer.File): Promise<Buffer> {
     if (file.buffer) {
       // memoryStorage
       return file.buffer;
     }
 
     const filePath =
-      (file as any).path ||
-      path.join(this.storageDir, 'images', file.filename);
+      (file as any).path || path.join(this.storageDir, 'images', file.filename);
 
     try {
       return await fs.promises.readFile(filePath);
@@ -91,8 +86,7 @@ export class FilesService {
     realMime: string,
   ): Promise<{ mime: string; size: number }> {
     const filePath =
-      (file as any).path ||
-      path.join(this.storageDir, 'images', file.filename);
+      (file as any).path || path.join(this.storageDir, 'images', file.filename);
 
     let sharpInstance = sharp(originalBuffer).rotate(); // auto-rotate
 
@@ -145,6 +139,8 @@ export class FilesService {
 
     const url = `${this.baseUrl}/images/${file.filename}`;
 
+    const downloadToken = crypto.randomUUID();
+
     return this.prisma.file.create({
       data: {
         project_name: project,
@@ -153,6 +149,7 @@ export class FilesService {
         file_type: processed.mime,
         file_size: processed.size,
         url,
+        download_token: downloadToken,
         uploaded_by,
       },
     });
@@ -181,11 +178,7 @@ export class FilesService {
     const file = await this.getFile(id, project);
     if (!file) return false;
 
-    const filePath = path.join(
-      this.storageDir,
-      'images',
-      file.filename_server,
-    );
+    const filePath = path.join(this.storageDir, 'images', file.filename_server);
     if (fs.existsSync(filePath)) {
       await fs.promises.unlink(filePath);
     }

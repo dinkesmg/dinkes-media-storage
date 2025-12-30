@@ -25,8 +25,11 @@ async function bootstrap() {
 
   // Serve folder images agar bisa diakses via http://localhost:3001/images/xxx.jpg
   app.use('/images', express.static(join(baseStorage, 'images')));
+  // app.use('/pdfs', express.static(join(baseStorage, 'pdfs')));
+  app.use('/pdfs', express.static(join(baseStorage, 'pdfs_public')));
 
   console.log('Serving images from:', join(baseStorage, 'images'));
+  console.log('Serving pdfs from:', join(baseStorage, 'pdfs_public'));
 
   app.enableCors({
     origin: [
@@ -40,7 +43,7 @@ async function bootstrap() {
   });
 
   app.use(
-    '/files',
+    ['/files', '/pdfs-api'],
     rateLimit({
       windowMs: 60 * 1000, // 1 menit
       max: 60, // maksimal 60 request per IP per menit
