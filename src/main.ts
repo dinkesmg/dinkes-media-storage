@@ -8,6 +8,9 @@ import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
+  const expressApp = app.getHttpAdapter().getInstance();
+  expressApp.set('trust proxy', 1);
+
   const config = new DocumentBuilder()
     .setTitle('Media Storage API')
     .setDescription('Daftar endpoint API')
@@ -36,6 +39,7 @@ async function bootstrap() {
       'http://localhost:5173',
       'http://localhost:3000',
       'https://sayangbeta.dinkes.semarangkota.go.id/',
+      'https://verrari.dinkes.semarangkota.go.id/',
     ],
     methods: ['GET', 'POST', 'PATCH', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'x-api-key'],
