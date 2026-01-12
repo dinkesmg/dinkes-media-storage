@@ -12,8 +12,12 @@ export class ApiKeyGuard implements CanActivate {
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const request = context.switchToHttp().getRequest();
-    const apiKey = request.headers['x-api-key'];
-    if (!apiKey) throw new UnauthorizedException('API Key is required');
+    const apiKeyRaw = request.headers['x-api-key'];
+    const apiKey = Array.isArray(apiKeyRaw) ? apiKeyRaw[0] : apiKeyRaw;
+
+    if (!apiKey || typeof apiKey !== 'string' || apiKey.trim() === '') {
+      throw new UnauthorizedException('API Key is required');
+    }
 
     const project = await this.prisma['project'].findUnique({
       where: { api_key: apiKey },

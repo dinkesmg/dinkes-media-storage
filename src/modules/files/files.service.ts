@@ -29,24 +29,14 @@ export class FilesService {
   }
 
   /**
-   * Ambil buffer file dari memoryStorage atau diskStorage.
+   * Helper path root untuk image public/private
+   * (tanpa subfolder project)
    */
-  private async getFileBuffer(file: Express.Multer.File): Promise<Buffer> {
-    if (file.buffer) {
-      // memoryStorage
-      return file.buffer;
-    }
-
-    const filePath =
-      (file as any).path || path.join(this.storageDir, 'images', file.filename);
-
-    try {
-      return await fs.promises.readFile(filePath);
-    } catch {
-      throw new BadRequestException(
-        'File tidak dapat dibaca. Silakan coba unggah ulang.',
-      );
-    }
+  private getImagesRoot(isPrivate: boolean) {
+    return path.join(
+      this.storageDir,
+      isPrivate ? 'images_private' : 'images_public',
+    );
   }
 
   /**
@@ -77,17 +67,13 @@ export class FilesService {
    * Proses gambar:
    * - auto-rotate (sesuai EXIF)
    * - strip metadata (EXIF, GPS, dll)
-   * - resize max 1920x1920 (optional, bisa diubah)
-   * - overwrite file di disk
+   * - resize max 1920x1920
+   * Return buffer hasil proses (belum ditulis ke disk)
    */
-  private async processAndStripMetadata(
-    file: Express.Multer.File,
+  private async processAndStripMetadataToBuffer(
     originalBuffer: Buffer,
     realMime: string,
-  ): Promise<{ mime: string; size: number }> {
-    const filePath =
-      (file as any).path || path.join(this.storageDir, 'images', file.filename);
-
+  ): Promise<Buffer> {
     let sharpInstance = sharp(originalBuffer).rotate(); // auto-rotate
 
     if (realMime === 'image/jpeg') {
@@ -101,54 +87,90 @@ export class FilesService {
       });
     }
 
-    // (opsional) batas resolusi maksimal
     sharpInstance = sharpInstance.resize(1920, 1920, {
       fit: 'inside',
       withoutEnlargement: true,
     });
 
-    const processedBuffer = await sharpInstance.toBuffer();
-
-    // overwrite file di disk dengan versi yang sudah dibersihkan
-    await fs.promises.writeFile(filePath, processedBuffer);
-
-    return {
-      mime: realMime,
-      size: processedBuffer.length,
-    };
+    return sharpInstance.toBuffer();
   }
 
-  // Simpan file metadata ke database
+  /**
+   * Ambil buffer file dari memoryStorage atau diskStorage.
+   * (kalau dari controller pakai FileInterceptor default, biasanya file.buffer ada)
+   */
+  private async getFileBuffer(file: Express.Multer.File): Promise<Buffer> {
+    if (file?.buffer) return file.buffer;
+
+    const filePath = (file as any)?.path;
+    if (!filePath) {
+      throw new BadRequestException(
+        'File tidak terbaca (buffer/path kosong). Pastikan upload multipart/form-data dengan key "file".',
+      );
+    }
+
+    try {
+      return await fs.promises.readFile(filePath);
+    } catch {
+      throw new BadRequestException(
+        'File tidak dapat dibaca. Silakan coba unggah ulang.',
+      );
+    }
+  }
+
+  /**
+   * Simpan file metadata ke database + simpan fisik ke disk.
+   * image disimpan ke:
+   * - storage_local/images_public/<filename>
+   * - storage_local/images_private/<filename>
+   *
+   * NOTE: Tanpa subfolder project.
+   */
   async saveFile(
     file: Express.Multer.File,
     project = 'default',
     uploaded_by?: string,
+    isPrivate = false, // ✅ tambahan param (opsional)
   ): Promise<File> {
     // 1) ambil buffer file
-    const buffer = await this.getFileBuffer(file);
+    const originalBuffer = await this.getFileBuffer(file);
 
     // 2) validasi MIME asli
-    const realMime = await this.validateImageMime(buffer);
+    const realMime = await this.validateImageMime(originalBuffer);
 
     // 3) proses gambar + hilangkan metadata sensitif
-    const processed = await this.processAndStripMetadata(
-      file,
-      buffer,
+    const processedBuffer = await this.processAndStripMetadataToBuffer(
+      originalBuffer,
       realMime,
     );
 
-    const url = `${this.baseUrl}/images/${file.filename}`;
+    // 4) tentukan filename server sendiri (JANGAN pakai file.filename)
+    const ext = realMime === 'image/png' ? '.png' : '.jpg';
+    const filenameServer = `img-${Date.now()}${ext}`;
+
+    // 5) tentukan folder public/private dan pastikan ada
+    const imagesRoot = this.getImagesRoot(isPrivate);
+    await fs.promises.mkdir(imagesRoot, { recursive: true });
+
+    const filePath = path.join(imagesRoot, filenameServer);
+
+    // 6) tulis ke disk
+    await fs.promises.writeFile(filePath, processedBuffer);
+
+    // 7) url (public saja). private -> null (kalau kamu ingin strict)
+    const url = isPrivate ? null : `${this.baseUrl}/images/${filenameServer}`;
 
     const downloadToken = crypto.randomUUID();
 
+    // 8) simpan ke DB
     return this.prisma.file.create({
       data: {
         project_name: project,
         filename_original: file.originalname,
-        filename_server: file.filename,
-        file_type: processed.mime,
-        file_size: processed.size,
-        url,
+        filename_server: filenameServer,
+        file_type: realMime,
+        file_size: processedBuffer.length,
+        url, // null kalau private (kalau kolom kamu mengizinkan null)
         download_token: downloadToken,
         uploaded_by,
       },
@@ -178,9 +200,20 @@ export class FilesService {
     const file = await this.getFile(id, project);
     if (!file) return false;
 
-    const filePath = path.join(this.storageDir, 'images', file.filename_server);
-    if (fs.existsSync(filePath)) {
-      await fs.promises.unlink(filePath);
+    // Karena DB kamu belum menyimpan flag is_private, kita coba hapus dari public & private.
+    const publicPath = path.join(
+      this.getImagesRoot(false),
+      file.filename_server,
+    );
+    const privatePath = path.join(
+      this.getImagesRoot(true),
+      file.filename_server,
+    );
+
+    if (fs.existsSync(publicPath)) {
+      await fs.promises.unlink(publicPath);
+    } else if (fs.existsSync(privatePath)) {
+      await fs.promises.unlink(privatePath);
     }
 
     await this.prisma.file.delete({ where: { id } });

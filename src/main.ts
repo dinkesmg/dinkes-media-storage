@@ -27,11 +27,11 @@ async function bootstrap() {
     process.env.STORAGE_DIR || join(__dirname, '../storage_local');
 
   // Serve folder images agar bisa diakses via http://localhost:3001/images/xxx.jpg
-  app.use('/images', express.static(join(baseStorage, 'images')));
+  app.use('/images', express.static(join(baseStorage, 'images_public')));
   // app.use('/pdfs', express.static(join(baseStorage, 'pdfs')));
   app.use('/pdfs', express.static(join(baseStorage, 'pdfs_public')));
 
-  console.log('Serving images from:', join(baseStorage, 'images'));
+  console.log('Serving images from:', join(baseStorage, 'images_public'));
   console.log('Serving pdfs from:', join(baseStorage, 'pdfs_public'));
 
   app.enableCors({
