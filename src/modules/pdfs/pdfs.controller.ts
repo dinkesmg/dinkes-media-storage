@@ -40,7 +40,7 @@ export class PdfsController {
         exceptionFactory: () =>
           new BadRequestException({
             statusCode: 400,
-            message: 'File tidak valid. Ukuran maksimal 10MB.',
+            message: 'File tidak valid. Ukuran maksimal 3MB.',
           }),
       }),
     )
