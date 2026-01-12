@@ -36,7 +36,7 @@ export class PdfsController {
   async uploadPdf(
     @UploadedFile(
       new ParseFilePipe({
-        validators: [new MaxFileSizeValidator({ maxSize: 10 * 1024 * 1024 })],
+        validators: [new MaxFileSizeValidator({ maxSize: 3 * 1024 * 1024 })],
         exceptionFactory: () =>
           new BadRequestException({
             statusCode: 400,
